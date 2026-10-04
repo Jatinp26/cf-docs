@@ -1,35 +1,18 @@
-# Sync CIP registry
-# -----------------
-# Single self-contained workflow. Builds ONE page (default: ai-context/cip-registry.mdx)
-# from the public canton-foundation/cips repo so the Mintlify AI assistant can answer
-# "what is CIP-N, what's its status, where do I read more".
-#
-# What it does each run:
-#   1. Clones canton-foundation/cips (public, no token needed).
-#   2. Reads the README index table: number, title, author, type, status.
-#   3. Opens each CIP file and pulls the Created/Approved dates, the discussion-thread
-#      link, and the first part of its Abstract (falls back to the title if none).
-#   4. Writes one MDX page: status legend, at-a-glance table, one section per CIP.
-#   5. Checks the page compiles as MDX, then commits it ONLY if something changed.
-#
-# Deterministic: no AI summaries and no run timestamps, so unchanged source = no commit.
-
 name: Sync CIP registry
-
 on:
   schedule:
-    - cron: "0 4 * * 1"    # weekly, Mondays 04:00 UTC
-  workflow_dispatch: {}    # "Run workflow" button for an on-demand refresh
-
+    - cron: "0 4 * * 1"
+  workflow_dispatch: {}
+  
 permissions:
   contents: write
-
+  
 concurrency:
   group: sync-cips
   cancel-in-progress: false
-
+  
 env:
-  CIP_PAGE: ai-context/cip-registry.mdx   # output path inside cf-docs
+  CIP_PAGE: docs-main/ai-context/cip-registry.mdx
 
 jobs:
   sync:
@@ -52,26 +35,7 @@ jobs:
         run: |
           cat > "$RUNNER_TEMP/generate_cip_page.py" <<'PY'
           #!/usr/bin/env python3
-          """
-          Generate a single, auto-maintained CIP registry page for docs.canton.network.
-
-          Source of truth: the public canton-foundation/cips repo.
-            - README.md index table  -> number, title, author, type, status
-            - cip-XXXX/cip-XXXX.md   -> preamble (Approved, Created, Post-History) + abstract
-
-          Output: one MDX file with one section per CIP, so the Mintlify assistant can answer
-          "what is CIP-N, what's its status, where do I read more".
-
-          Deterministic by design: no LLM summaries, no wall-clock timestamps. The page only
-          changes when the cips repo changes, so the workflow commits only on real updates.
-
-          Usage:
-            python generate_cip_page.py --cips-dir ./cips --out ./cips/index.mdx \
-                [--source-sha <sha>] [--source-date <iso>]
-          """
-
           from __future__ import annotations
-
           import argparse
           import re
           import sys
@@ -80,13 +44,8 @@ jobs:
 
           REPO_URL = "https://github.com/canton-foundation/cips"
           BLOB_BASE = f"{REPO_URL}/blob/main"
-          ABSTRACT_MAX_CHARS = 700
-
-          # Sections to try, in order, when looking for a summary paragraph.
+          ABSTRACT_MAX_CHARS = 1000
           SUMMARY_HEADINGS = ["abstract", "summary", "simple summary", "overview", "motivation", "introduction"]
-
-          # Plain-language meaning of each status, shown on the page so the assistant can explain it.
-          # Definitions follow CIP-0000 (the CIP process).
           STATUS_MEANINGS = {
               "draft": "Being written and discussed on cip-discuss; not yet submitted for a vote.",
               "proposed": "Submitted for a Super Validator vote (requires support from at least two Super Validators); not yet approved.",
@@ -100,7 +59,6 @@ jobs:
               "obsolete": "No longer relevant (equivalent to Replaced).",
           }
 
-
           @dataclass
           class Cip:
               number: int
@@ -109,7 +67,7 @@ jobs:
               type: str
               status: str
               layer: str = ""
-              path: str | None = None          # repo-relative path to the .md, if any
+              path: str | None = None    
               approved: str = ""
               created: str = ""
               post_history: list[str] = field(default_factory=list)
@@ -129,7 +87,6 @@ jobs:
           # --------------------------------------------------------------------------- parsing
 
           ROW_RE = re.compile(r"^\|\s*(\[?cip-(\d{4})\]?(?:\(([^)]*)\))?)\s*\|(.*)$", re.IGNORECASE)
-
 
           def parse_readme(readme: Path) -> list[Cip]:
               cips: dict[int, Cip] = {}
